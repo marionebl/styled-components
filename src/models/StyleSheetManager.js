@@ -3,6 +3,7 @@ import React, { Component } from 'react'
 import PropTypes from 'prop-types'
 import StyleSheet, { CONTEXT_KEY } from './StyleSheet'
 import { tagConstructorWithTarget } from './BrowserStyleSheet'
+import ServerStyleSheet from './ServerStyleSheet'
 
 class StyleSheetManager extends Component {
   sheetInstance: StyleSheet
@@ -35,11 +36,17 @@ class StyleSheetManager extends Component {
 }
 
 StyleSheetManager.childContextTypes = {
-  [CONTEXT_KEY]: PropTypes.instanceOf(StyleSheet).isRequired,
+  [CONTEXT_KEY]: PropTypes.oneOfType([
+    PropTypes.instanceOf(StyleSheet),
+    PropTypes.instanceOf(ServerStyleSheet),
+  ]).isRequired,
 }
 
 StyleSheetManager.propTypes = {
-  sheet: PropTypes.instanceOf(StyleSheet),
+  sheet: PropTypes.oneOfType([
+    PropTypes.instanceOf(StyleSheet),
+    PropTypes.instanceOf(ServerStyleSheet),
+  ]).isRequired,
   target: PropTypes.shape({
     appendChild: PropTypes.func.isRequired,
   }),

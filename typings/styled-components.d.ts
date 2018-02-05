@@ -18,8 +18,11 @@ export type OuterStyledProps<P> = ThemedOuterStyledProps<P, any>;
 
 export type Interpolation<P> = FlattenInterpolation<P> | ReadonlyArray<FlattenInterpolation<P> | ReadonlyArray<FlattenInterpolation<P>>>;
 export type FlattenInterpolation<P> = InterpolationValue | InterpolationFunction<P>;
-export type InterpolationValue = string | number | StyledComponentClass<any, any>;
+export type InterpolationValue = string | number | Styles | StyledComponentClass<any, any>;
 export type SimpleInterpolation = InterpolationValue | ReadonlyArray<InterpolationValue | ReadonlyArray<InterpolationValue>>;
+export interface Styles {
+  [ruleOrSelector: string]: string | number | Styles;
+}
 export interface InterpolationFunction<P> {
   (props: P): Interpolation<P>;
 }
@@ -44,14 +47,13 @@ export interface ThemedStyledFunction<P, T, O = P> {
 export type StyledFunction<P> = ThemedStyledFunction<P, any>;
 
 type ThemedStyledComponentFactories<T> = {
-    [K in keyof JSX.IntrinsicElements]: ThemedStyledFunction<JSX.IntrinsicElements[K], T>;
+    [TTag in keyof JSX.IntrinsicElements]: ThemedStyledFunction<JSX.IntrinsicElements[TTag], T>;
 };
 
 export interface ThemedBaseStyledInterface<T> extends ThemedStyledComponentFactories<T> {
+  <P, TTag extends keyof JSX.IntrinsicElements>(tag: TTag): ThemedStyledFunction<P, T, P & JSX.IntrinsicElements[TTag]>;
   <P, O>(component: StyledComponentClass<P, T, O>): ThemedStyledFunction<P, T, O>;
-  <P extends { theme: T; }>(component: React.ComponentClass<P>): ThemedStyledFunction<P, T, WithOptionalTheme<P, T>>;
-  <P>(component: React.ComponentClass<P>): ThemedStyledFunction<P, T>;
-  <P extends { [prop: string]: any; theme?: T; }>(component: React.StatelessComponent<P>): ThemedStyledFunction<P, T, WithOptionalTheme<P, T>>;
+  <P extends { [prop: string]: any; theme?: T }>(component: React.ComponentType<P>): ThemedStyledFunction<P, T, WithOptionalTheme<P, T>>;
 }
 export type BaseStyledInterface = ThemedBaseStyledInterface<any>;
 

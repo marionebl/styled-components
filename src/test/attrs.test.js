@@ -105,18 +105,18 @@ describe('attrs', () => {
   })
 
   it('pass attrs to style block', () => {
-    /* Would be a React Router Link in IRL */
+    /* Would be a React Router Link in real life */
     const Comp = styled.a.attrs({
       href: '#',
-      activeClassName: '--is-active'
+      'data-active-class-name': '--is-active'
     })`
-      color: blue;
-      &.${props => props.activeClassName} {
-        color: red;
+      color:blue;
+      &.${props => props['data-active-class-name']} {
+        color:red;
       }
     `
-    expect(shallow(<Comp />).html()).toEqual('<a href="#" class="sc-a b"></a>')
-    expectCSSMatches('.sc-a {} .b { color: blue; } .b.--is-active { color: red; }')
+    expect(shallow(<Comp />).html()).toEqual('<a href="#" data-active-class-name="--is-active" class="sc-a b"></a>')
+    expectCSSMatches('.sc-a {} .b { color:blue; } .b.--is-active { color:red; }')
   })
 
   it('should pass through children as a normal prop', () => {
