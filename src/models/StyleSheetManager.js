@@ -1,9 +1,13 @@
 // @flow
 import React, { Component } from 'react'
 import PropTypes from 'prop-types'
-import StyleSheet, { CONTEXT_KEY } from './StyleSheet'
+import StyleSheet from './StyleSheet'
 import { tagConstructorWithTarget } from './BrowserStyleSheet'
 import ServerStyleSheet from './ServerStyleSheet'
+
+// TODO: Import this from ./StyleSheet,
+// For some reason CONTEXT_KEY is undefined during testing
+const CONTEXT_KEY = '__styled-components-stylesheet__'
 
 class StyleSheetManager extends Component {
   sheetInstance: StyleSheet
@@ -48,7 +52,7 @@ StyleSheetManager.propTypes = {
   sheet: PropTypes.oneOfType([
     PropTypes.instanceOf(StyleSheet),
     PropTypes.instanceOf(ServerStyleSheet),
-  ]).isRequired,
+  ]),
   target: PropTypes.shape({
     appendChild: PropTypes.func.isRequired,
   }),
