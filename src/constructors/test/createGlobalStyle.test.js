@@ -47,6 +47,14 @@ describe(`createGlobalStyle`, () => {
     cleanup()
   })
 
+  it(`falls back to empty theme`, () => {
+    const {cleanup, render} = setup()
+    const Component = createGlobalStyle`div {color:${props => props.theme.color || 'palevioletred'};} `
+    render(<Component/>)
+    expectCSSMatches(`div{color:palevioletred;} `)
+    cleanup()
+  })
+
   it(`supports theming`, () => {
     const {cleanup, render} = setup()
     const Component = createGlobalStyle`div {color:${props => props.theme.color};} `

@@ -28,6 +28,10 @@ export default (stringifyRules: Stringifier, css: CSSConstructor) => {
         ]),
       }
 
+      static defaultProps = {
+        theme: {}
+      }
+
       static styledComponentId = id
 
       componentWillMount() {
