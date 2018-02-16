@@ -3,6 +3,15 @@ import Stylis from 'stylis'
 import _insertRulePlugin from 'stylis-rule-sheet'
 import type { Interpolation } from '../types'
 
+const stylisSplitter = new Stylis({
+  global: false,
+  cascade: false,
+  keyframe: false,
+  prefix: false,
+  compress: false,
+  semicolon: false,
+})
+
 const stylis = new Stylis({
   global: false,
   cascade: true,
@@ -31,18 +40,24 @@ const parseRulesPlugin = _insertRulePlugin(rule => {
 })
 
 stylis.use([parseRulesPlugin, returnRulesPlugin])
+stylisSplitter.use([parseRulesPlugin, returnRulesPlugin])
+
+export const replaceComments = (css: string) => css.replace(/^\s*\/\/.*$/gm, '')
 
 const stringifyRules = (
   rules: Array<Interpolation>,
   selector: ?string,
   prefix: ?string
 ): Array<string> => {
-  const flatCSS = rules.join('').replace(/^\s*\/\/.*$/gm, '') // replace JS comments
+  const flatCSS = replaceComments(rules.join(''))
 
   const cssStr =
     selector && prefix ? `${prefix} ${selector} { ${flatCSS} }` : flatCSS
 
   return stylis(prefix || !selector ? '' : selector, cssStr)
 }
+
+export const splitByRules = (css: string): Array<string> =>
+  stylisSplitter('', css)
 
 export default stringifyRules
