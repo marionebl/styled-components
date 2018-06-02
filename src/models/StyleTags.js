@@ -2,7 +2,7 @@
 /* eslint-disable flowtype/object-type-delimiter */
 /* eslint-disable react/prop-types */
 
-import React from 'react'
+import React, { type Element } from 'react'
 import { IS_BROWSER, DISABLE_SPEEDY, SC_ATTR } from '../constants'
 import { type ExtractedComp } from '../utils/extractCompsFromCSS'
 import { splitByRules } from '../utils/stringifyRules'
@@ -20,7 +20,7 @@ import {
 
 import {
   sheetForTag,
-  safeInsertRules,
+  safeInsertRule,
   deleteRules,
 } from '../utils/insertRuleHelpers'
 
@@ -39,7 +39,7 @@ export interface Tag<T> {
   removeRules(id: string): void;
   css(): string;
   toHTML(additionalAttrs: ?string): string;
-  toElement(): React.Element<*>;
+  toElement(): Element<*>;
   clone(): Tag<T>;
 }
 
@@ -81,9 +81,12 @@ const addUpUntilIndex = (sizes: number[], index: number): number => {
 }
 
 /* create a new style tag after lastEl */
-const makeStyleTag = (target: ?HTMLElement, lastTag: ?Node) => {
+const makeStyleTag = (
+  target: ?HTMLElement,
+  tagEl: ?Node,
+  insertBefore: ?boolean
+) => {
   const el = document.createElement('style')
-  el.type = 'text/css'
   el.setAttribute(SC_ATTR, '')
 
   const nonce = getNonce()
@@ -94,16 +97,16 @@ const makeStyleTag = (target: ?HTMLElement, lastTag: ?Node) => {
   /* Work around insertRule quirk in EdgeHTML */
   el.appendChild(document.createTextNode(''))
 
-  if (target && !lastTag) {
+  if (target && !tagEl) {
     /* Append to target when no previous element was passed */
     target.appendChild(el)
   } else {
-    if (!lastTag || !target || !lastTag.parentNode) {
+    if (!tagEl || !target || !tagEl.parentNode) {
       throw new Error(parentNodeUnmountedErr)
     }
 
     /* Insert new style tag after the previous one */
-    lastTag.parentNode.insertBefore(el, lastTag.nextSibling)
+    tagEl.parentNode.insertBefore(el, insertBefore ? tagEl : tagEl.nextSibling)
   }
 
   return el
@@ -121,13 +124,12 @@ const wrapAsHtmlTag = (css: () => string, names: Names) => (
   ]
 
   const htmlAttr = attrs.filter(Boolean).join(' ')
-  return `<style type="text/css" ${htmlAttr}>${css()}</style>`
+  return `<style ${htmlAttr}>${css()}</style>`
 }
 
 /* takes a css factory function and outputs an element factory */
 const wrapAsElement = (css: () => string, names: Names) => () => {
   const props = {
-    type: 'text/css',
     [SC_ATTR]: stringifyNames(names),
   }
 
@@ -137,17 +139,25 @@ const wrapAsElement = (css: () => string, names: Names) => () => {
     props.nonce = nonce
   }
 
-  return <style {...props}>{css()}</style>
+  // eslint-disable-next-line react/no-danger
+  return <style {...props} dangerouslySetInnerHTML={{ __html: css() }} />
 }
 
 const getIdsFromMarkersFactory = (markers: Object) => (): string[] =>
   Object.keys(markers)
 
 /* speedy tags utilise insertRule */
-const makeSpeedyTag = (el: HTMLStyleElement): Tag<number> => {
-  const names: Names = Object.create(null)
+const makeSpeedyTag = (
+  el: HTMLStyleElement,
+  getImportRuleTag: ?() => Tag<any>
+): Tag<number> => {
+  const names: Names = (Object.create(null): Object)
   const markers = Object.create(null)
   const sizes: number[] = []
+
+  const extractImport = getImportRuleTag !== undefined
+  /* indicates whther getImportRuleTag was called */
+  let usedImportRuleTag = false
 
   const insertMarker = id => {
     const prev = markers[id]
@@ -155,17 +165,40 @@ const makeSpeedyTag = (el: HTMLStyleElement): Tag<number> => {
       return prev
     }
 
-    const marker = (markers[id] = sizes.length)
+    markers[id] = sizes.length
     sizes.push(0)
     resetIdNames(names, id)
-    return marker
+
+    return markers[id]
   }
 
   const insertRules = (id, cssRules, name) => {
     const marker = insertMarker(id)
     const sheet = sheetForTag(el)
     const insertIndex = addUpUntilIndex(sizes, marker)
-    sizes[marker] += safeInsertRules(sheet, cssRules, insertIndex)
+
+    let injectedRules = 0
+    const importRules = []
+    const cssRulesSize = cssRules.length
+
+    for (let i = 0; i < cssRulesSize; i += 1) {
+      const cssRule = cssRules[i]
+      let mayHaveImport = extractImport /* @import rules are reordered to appear first */
+      if (mayHaveImport && cssRule.indexOf('@import') !== -1) {
+        importRules.push(cssRule)
+      } else if (safeInsertRule(sheet, cssRule, insertIndex + injectedRules)) {
+        mayHaveImport = false
+        injectedRules += 1
+      }
+    }
+
+    if (extractImport && importRules.length > 0) {
+      usedImportRuleTag = true
+      // $FlowFixMe
+      getImportRuleTag().insertRules(`${id}-import`, importRules)
+    }
+
+    sizes[marker] += injectedRules /* add up no of injected rules */
     addNameForId(names, id, name)
   }
 
@@ -179,19 +212,28 @@ const makeSpeedyTag = (el: HTMLStyleElement): Tag<number> => {
     deleteRules(sheet, removalIndex, size)
     sizes[marker] = 0
     resetIdNames(names, id)
+
+    if (extractImport && usedImportRuleTag) {
+      // $FlowFixMe
+      getImportRuleTag().removeRules(`${id}-import`)
+    }
   }
 
   const css = () => {
     const { cssRules } = sheetForTag(el)
     let str = ''
-    let i = 0
 
     // eslint-disable-next-line guard-for-in
     for (const id in markers) {
       str += makeTextMarker(id)
-      const end = markers[id] + i
-      for (; i < end; i += 1) {
-        str += cssRules[i].cssText
+      const marker = markers[id]
+      const end = addUpUntilIndex(sizes, marker)
+      const size = sizes[marker]
+      for (let i = end - size; i < end; i += 1) {
+        const rule = cssRules[i]
+        if (rule !== undefined) {
+          str += rule.cssText
+        }
       }
     }
 
@@ -212,11 +254,18 @@ const makeSpeedyTag = (el: HTMLStyleElement): Tag<number> => {
   }
 }
 
-const makeBrowserTag = (el: HTMLStyleElement): Tag<Text> => {
-  const names = Object.create(null)
+const makeBrowserTag = (
+  el: HTMLStyleElement,
+  getImportRuleTag: ?() => Tag<any>
+): Tag<Text> => {
+  const names = (Object.create(null): Object)
   const markers = Object.create(null)
 
+  const extractImport = getImportRuleTag !== undefined
   const makeTextNode = id => document.createTextNode(makeTextMarker(id))
+
+  /* indicates whther getImportRuleTag was called */
+  let usedImportRuleTag = false
 
   const insertMarker = id => {
     const prev = markers[id]
@@ -224,25 +273,53 @@ const makeBrowserTag = (el: HTMLStyleElement): Tag<Text> => {
       return prev
     }
 
-    const marker = (markers[id] = makeTextNode(id))
-    el.appendChild(marker)
+    markers[id] = makeTextNode(id)
+    el.appendChild(markers[id])
     names[id] = Object.create(null)
-    return marker
+
+    return markers[id]
   }
 
   const insertRules = (id, cssRules, name) => {
-    insertMarker(id).appendData(cssRules.join(' '))
+    const marker = insertMarker(id)
+    const importRules = []
+    const cssRulesSize = cssRules.length
+
+    for (let i = 0; i < cssRulesSize; i += 1) {
+      const rule = cssRules[i]
+      let mayHaveImport = extractImport
+      if (mayHaveImport && rule.indexOf('@import') !== -1) {
+        importRules.push(rule)
+      } else {
+        mayHaveImport = false
+        const separator = i === cssRulesSize - 1 ? '' : ' '
+        marker.appendData(`${rule}${separator}`)
+      }
+    }
+
     addNameForId(names, id, name)
+
+    if (extractImport && importRules.length > 0) {
+      usedImportRuleTag = true
+      // $FlowFixMe
+      getImportRuleTag().insertRules(`${id}-import`, importRules)
+    }
   }
 
   const removeRules = id => {
     const marker = markers[id]
     if (marker === undefined) return
+
     /* create new empty text node and replace the current one */
     const newMarker = makeTextNode(id)
     el.replaceChild(newMarker, marker)
     markers[id] = newMarker
     resetIdNames(names, id)
+
+    if (extractImport && usedImportRuleTag) {
+      // $FlowFixMe
+      getImportRuleTag().removeRules(`${id}-import`)
+    }
   }
 
   const css = () => {
@@ -268,9 +345,10 @@ const makeBrowserTag = (el: HTMLStyleElement): Tag<Text> => {
   }
 }
 
-const makeServerTag = (): Tag<[string]> => {
-  const names = Object.create(null)
-  const markers = Object.create(null)
+const makeServerTagInternal = (namesArg, markersArg): Tag<[string]> => {
+  const names =
+    namesArg === undefined ? (Object.create(null): Object) : namesArg
+  const markers = markersArg === undefined ? Object.create(null) : markersArg
 
   const insertMarker = id => {
     const prev = markers[id]
@@ -306,6 +384,18 @@ const makeServerTag = (): Tag<[string]> => {
     return str
   }
 
+  const clone = () => {
+    const namesClone = cloneNames(names)
+    const markersClone = Object.create(null)
+
+    // eslint-disable-next-line guard-for-in
+    for (const id in markers) {
+      markersClone[id] = [markers[id][0]]
+    }
+
+    return makeServerTagInternal(namesClone, markersClone)
+  }
+
   const tag = {
     styleTag: null,
     getIds: getIdsFromMarkersFactory(markers),
@@ -316,29 +406,27 @@ const makeServerTag = (): Tag<[string]> => {
     css,
     toHTML: wrapAsHtmlTag(css, names),
     toElement: wrapAsElement(css, names),
-    clone() {
-      return {
-        ...tag,
-        names: cloneNames(names),
-        markers: { ...markers },
-      }
-    },
+    clone,
   }
 
   return tag
 }
 
+const makeServerTag = (): Tag<[string]> => makeServerTagInternal()
+
 export const makeTag = (
   target: ?HTMLElement,
-  lastEl: ?HTMLStyleElement,
-  forceServer?: boolean
+  tagEl: ?HTMLStyleElement,
+  forceServer?: boolean,
+  insertBefore?: boolean,
+  getImportRuleTag?: () => Tag<any>
 ): Tag<any> => {
   if (IS_BROWSER && !forceServer) {
-    const el = makeStyleTag(target, lastEl)
+    const el = makeStyleTag(target, tagEl, insertBefore)
     if (DISABLE_SPEEDY) {
-      return makeBrowserTag(el)
+      return makeBrowserTag(el, getImportRuleTag)
     } else {
-      return makeSpeedyTag(el)
+      return makeSpeedyTag(el, getImportRuleTag)
     }
   }
 

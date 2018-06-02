@@ -64,6 +64,24 @@ describe('ssr', () => {
     expect(css).toMatchSnapshot()
   })
 
+  it('should not spill ServerStyleSheets into each other', () => {
+    const A = styled.h1`color: red;`
+    const B = styled.h1`color: green;`
+
+    const sheetA = new ServerStyleSheet()
+    renderToString(sheetA.collectStyles(<A />))
+    const cssA = sheetA.getStyleTags()
+
+    const sheetB = new ServerStyleSheet()
+    renderToString(sheetB.collectStyles(<B />))
+    const cssB = sheetB.getStyleTags()
+
+    expect(cssA).toContain('red')
+    expect(cssA).not.toContain('green')
+    expect(cssB).not.toContain('red')
+    expect(cssB).toContain('green')
+  })
+
   it('should add a nonce to the stylesheet if webpack nonce is detected in the global scope', () => {
     // eslint-disable-next-line
     require('../utils/nonce').mockImplementation(() => 'foo')
@@ -203,6 +221,11 @@ describe('ssr', () => {
     const elements = sheet.getStyleElement()
 
     expect(elements).toHaveLength(1)
+
+    /* I know this looks pointless, but apparently I have the feeling we'll need this */
+    expect(elements[0].props.dangerouslySetInnerHTML).toBeDefined()
+    expect(elements[0].props.children).not.toBeDefined()
+
     expect(elements[0].props).toMatchSnapshot()
   })
 
@@ -253,6 +276,29 @@ describe('ssr', () => {
       })
 
       stream.on('error', reject)
+    })
+  })
+
+  it('should handle errors while streaming', () => {
+    injectGlobal`
+      body { background: papayawhip; }
+    `
+    const Heading = styled.h1`
+      color: red;
+    `
+
+    const sheet = new ServerStyleSheet()
+    const jsx = sheet.collectStyles(null)
+    const stream = sheet.interleaveWithNodeStream(renderToNodeStream(jsx))
+
+    return new Promise((resolve, reject) => {
+      stream.on('data', function noop(){})
+
+      stream.on('error', (err) => {
+        expect(err).toMatchSnapshot()
+        expect(sheet.closed).toBe(true)
+        resolve()
+      })
     })
   })
 })

@@ -20,7 +20,7 @@ export default (stringifyRules: Stringifier, css: CSSConstructor) => {
     const id = `sc-global-${hashStr(JSON.stringify(rules))}`
     const style = new GlobalStyle(rules, id)
 
-    class GlobalStyleComponent extends React.Component {
+    class GlobalStyleComponent extends React.Component<*, *> {
       static contextTypes = {
         [CONTEXT_KEY]: PropTypes.oneOfType([
           PropTypes.instanceOf(StyleSheet),
@@ -29,7 +29,7 @@ export default (stringifyRules: Stringifier, css: CSSConstructor) => {
       }
 
       static defaultProps = {
-        theme: {}
+        theme: {},
       }
 
       static styledComponentId = id
@@ -55,10 +55,12 @@ export default (stringifyRules: Stringifier, css: CSSConstructor) => {
       }
 
       render() {
-        return null
+        return this.props.children || null
       }
     }
 
+    // TODO: Use internal abstractions to avoid additional component layers
+    // Depends on a future overall refactoring of theming system / context
     return withTheme(GlobalStyleComponent)
   }
 

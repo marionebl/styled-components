@@ -26,6 +26,9 @@ const commonPlugins = [
   sourceMaps(),
   commonjs({
     ignoreGlobal: true,
+    namedExports: {
+      'react-is': ['isValidElementType'],
+    },
   }),
   babel({
     plugins: ['external-helpers'],
@@ -37,13 +40,16 @@ const commonPlugins = [
 
 const configBase = {
   input: 'src/index.js',
-  globals: { react: 'React' },
-  external: ['react'].concat(Object.keys(pkg.dependencies)),
+  globals: { 'prop-types': 'PropTypes', react: 'React' },
+  external: ['react', 'prop-types'].concat(
+    Object.keys(pkg.dependencies),
+    Object.keys(pkg.peerDependencies)
+  ),
   plugins: commonPlugins,
   sourcemap: true,
 }
 
-const umdConfig = Object.assign({}, configBase, {
+const umdBaseConfig = Object.assign({}, configBase, {
   output: {
     file: 'dist/styled-components.js',
     format: 'umd',
@@ -59,22 +65,21 @@ const umdConfig = Object.assign({}, configBase, {
   ),
 })
 
-const devUmdConfig = Object.assign({}, umdConfig, {
-  plugins: umdConfig.plugins.concat(
+const umdConfig = Object.assign({}, umdBaseConfig, {
+  plugins: umdBaseConfig.plugins.concat(
     replace({
       'process.env.NODE_ENV': JSON.stringify('development'),
     })
   ),
 })
 
-const prodUmdConfig = Object.assign({}, umdConfig, {
-  output: Object.assign({}, umdConfig.output, {
+const umdProdConfig = Object.assign({}, umdBaseConfig, {
+  output: Object.assign({}, umdBaseConfig.output, {
     file: 'dist/styled-components.min.js',
   }),
-  plugins: umdConfig.plugins.concat([
+  plugins: umdBaseConfig.plugins.concat([
     replace({
       'process.env.NODE_ENV': JSON.stringify('production'),
-      "export * from './secretInternals'": '',
     }),
     uglify({
       sourceMap: true,
@@ -96,6 +101,21 @@ const serverConfig = Object.assign({}, configBase, {
   ),
 })
 
+const serverProdConfig = Object.assign({}, configBase, serverConfig, {
+  output: [
+    { file: 'dist/styled-components.es.min.js', format: 'es' },
+    Object.assign({}, cjs, { file: 'dist/styled-components.cjs.min.js' }),
+  ],
+  plugins: serverConfig.plugins.concat(
+    replace({
+      'process.env.NODE_ENV': JSON.stringify('production'),
+    }),
+    uglify({
+      sourceMap: true,
+    })
+  ),
+})
+
 const browserConfig = Object.assign({}, configBase, {
   output: [
     { file: 'dist/styled-components.browser.es.js', format: 'es' },
@@ -104,15 +124,33 @@ const browserConfig = Object.assign({}, configBase, {
   plugins: configBase.plugins.concat(
     replace({
       __SERVER__: JSON.stringify(false),
-      "export * from './secretInternals'": '',
     }),
     ignore(['stream'])
   ),
 })
 
+const browserProdConfig = Object.assign({}, configBase, browserConfig, {
+  output: [
+    { file: 'dist/styled-components.browser.es.min.js', format: 'es' },
+    Object.assign({}, cjs, {
+      file: 'dist/styled-components.browser.cjs.min.js',
+    }),
+  ],
+  plugins: browserConfig.plugins.concat(
+    replace({
+      'process.env.NODE_ENV': JSON.stringify('production'),
+    }),
+    uglify({
+      sourceMap: true,
+    })
+  ),
+})
+
 const nativeConfig = Object.assign({}, configBase, {
   input: 'src/native/index.js',
-  output: Object.assign({}, cjs, { file: 'dist/styled-components.native.cjs.js' }),
+  output: Object.assign({}, cjs, {
+    file: 'dist/styled-components.native.cjs.js',
+  }),
   external: configBase.external.concat('react-native'),
 })
 
@@ -162,10 +200,12 @@ const noParserBrowserConfig = Object.assign({}, configBase, {
 })
 
 export default [
-  devUmdConfig,
-  prodUmdConfig,
+  umdConfig,
+  umdProdConfig,
   serverConfig,
+  serverProdConfig,
   browserConfig,
+  browserProdConfig,
   nativeConfig,
   primitivesConfig,
   noParserConfig,

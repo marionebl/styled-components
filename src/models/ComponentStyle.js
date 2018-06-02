@@ -1,41 +1,13 @@
 // @flow
 import hashStr from '../vendor/glamor/hash'
-
+import isStaticRules from '../utils/isStaticRules'
 import type { RuleSet, NameGenerator, Flattener, Stringifier } from '../types'
 import StyleSheet from './StyleSheet'
 import { IS_BROWSER } from '../constants'
-import isStyledComponent from '../utils/isStyledComponent'
 
 const areStylesCacheable = IS_BROWSER
 
-const isStaticRules = (rules: RuleSet, attrs?: Object): boolean => {
-  for (let i = 0; i < rules.length; i += 1) {
-    const rule = rules[i]
-
-    // recursive case
-    if (Array.isArray(rule) && !isStaticRules(rule)) {
-      return false
-    } else if (typeof rule === 'function' && !isStyledComponent(rule)) {
-      // functions are allowed to be static if they're just being
-      // used to get the classname of a nested styled copmonent
-      return false
-    }
-  }
-
-  if (attrs !== undefined) {
-    // eslint-disable-next-line guard-for-in, no-restricted-syntax
-    for (const key in attrs) {
-      const value = attrs[key]
-      if (typeof value === 'function') {
-        return false
-      }
-    }
-  }
-
-  return true
-}
-
-const isHRMEnabled =
+const isHMREnabled =
   typeof module !== 'undefined' &&
   module.hot &&
   process.env.NODE_ENV !== 'production'
@@ -60,7 +32,7 @@ export default (
 
     constructor(rules: RuleSet, attrs?: Object, componentId: string) {
       this.rules = rules
-      this.isStatic = !isHRMEnabled && isStaticRules(rules, attrs)
+      this.isStatic = !isHMREnabled && isStaticRules(rules, attrs)
       this.componentId = componentId
 
       if (!StyleSheet.master.hasId(componentId)) {
@@ -78,7 +50,12 @@ export default (
      * */
     generateAndInjectStyles(executionContext: Object, styleSheet: StyleSheet) {
       const { isStatic, componentId, lastClassName } = this
-      if (areStylesCacheable && isStatic && lastClassName !== undefined) {
+      if (
+        areStylesCacheable &&
+        isStatic &&
+        lastClassName !== undefined &&
+        styleSheet.hasNameForId(componentId, ((lastClassName: any): string))
+      ) {
         return lastClassName
       }
 
@@ -86,27 +63,12 @@ export default (
       const name = generateRuleHash(this.componentId + flatCSS.join(''))
 
       if (!styleSheet.hasNameForId(componentId, name)) {
-        const css = stringifyRules(flatCSS, name ? `.${name}` : '')
+        const css = stringifyRules(flatCSS, `.${name}`)
         styleSheet.inject(this.componentId, css, name)
       }
 
       this.lastClassName = name
       return name
-    }
-
-    updateAndInjectStyles(executionContext: Object, styleSheet: StyleSheet) {
-      const { isStatic, lastClassName } = this
-      if (areStylesCacheable && isStatic && lastClassName !== undefined) {
-        return lastClassName
-      }
-
-      this.removeStyles(styleSheet)
-      return this.generateAndInjectStyles(executionContext, styleSheet)
-    }
-
-    removeStyles(styleSheet: StyleSheet) {
-      const { componentId } = this
-      styleSheet.remove(componentId)
     }
 
     static generateName(str: string): string {

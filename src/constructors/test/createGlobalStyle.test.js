@@ -182,7 +182,7 @@ describe(`createGlobalStyle`, () => {
     }
 
     render(<Comp/>)
-    expect(getCSS()).not.toContain(`[data-test-remove]{color:grey;}`)
+    expect(getCSS(document)).not.toContain(`[data-test-remove]{color:grey;}`)
     cleanup()
   })
 
@@ -233,14 +233,14 @@ describe(`createGlobalStyle`, () => {
 
     {
       el.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-      const css = getCSS()
+      const css = getCSS(document)
       expect(css).not.toContain('body{color:white;}')
       expect(css).toContain('body{background:palevioletred;}')
     }
 
     {
       el.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-      const css = getCSS()
+      const css = getCSS(document)
       expect(css).not.toContain('body{color:white;}')
       expect(css).not.toContain('body{background:palevioletred;}')
     }

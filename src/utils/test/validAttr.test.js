@@ -44,6 +44,7 @@ describe('validAttr', () => {
     expect(validAttr('contentEditable')).toEqual(true)
     expect(validAttr('contextMenu')).toEqual(true)
     expect(validAttr('controls')).toEqual(true)
+    expect(validAttr('controlsList')).toEqual(true)
     expect(validAttr('coords')).toEqual(true)
     expect(validAttr('crossOrigin')).toEqual(true)
     expect(validAttr('data')).toEqual(true)
@@ -438,6 +439,7 @@ describe('validAttr', () => {
     expect(validAttr('onFocus')).toEqual(true)
     expect(validAttr('onFocusCapture')).toEqual(true)
     expect(validAttr('onBlur')).toEqual(true)
+    expect(validAttr('onInvalid')).toEqual(true)
     expect(validAttr('onBlurCapture')).toEqual(true)
     expect(validAttr('onChange')).toEqual(true)
     expect(validAttr('onChangeCapture')).toEqual(true)
@@ -558,4 +560,7 @@ describe('validAttr', () => {
     expect(validAttr('isPrimary')).toEqual(false)
     expect(validAttr('primary')).toEqual(false)
   });
+  it('should handle x attributes', () => {
+    expect(validAttr('x-error-message')).toEqual(true)
+  })
 })

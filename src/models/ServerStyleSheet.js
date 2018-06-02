@@ -26,12 +26,24 @@ const streamBrowserErr =
     : ''
 
 export default class ServerStyleSheet {
-  closed: boolean
   instance: StyleSheet
+  masterSheet: StyleSheet
+  closed: boolean
 
   constructor() {
-    this.instance = StyleSheet.master.clone()
+    /* The master sheet might be reset, so keep a reference here */
+    this.masterSheet = StyleSheet.master
+    this.instance = this.masterSheet.clone()
     this.closed = false
+  }
+
+  complete() {
+    if (!this.closed) {
+      /* Remove closed StyleSheets from the master sheet */
+      const index = this.masterSheet.clones.indexOf(this.instance)
+      this.masterSheet.clones.splice(index, 1)
+      this.closed = true
+    }
   }
 
   collectStyles(children: any) {
@@ -45,18 +57,12 @@ export default class ServerStyleSheet {
   }
 
   getStyleTags(): string {
-    if (!this.closed) {
-      this.closed = true
-    }
-
+    this.complete()
     return this.instance.toHTML()
   }
 
   getStyleElement() {
-    if (!this.closed) {
-      this.closed = true
-    }
-
+    this.complete()
     return this.instance.toReactElements()
   }
 
@@ -70,36 +76,35 @@ export default class ServerStyleSheet {
     let instanceTagIndex = 0
 
     const streamAttr = `${SC_STREAM_ATTR}="true"`
-    const ourStream = new stream.Readable()
-    // $FlowFixMe
-    ourStream._read = () => {}
 
-    readableStream.on('data', chunk => {
-      const { tags } = instance
-      let html = ''
+    const transformer = new stream.Transform({
+      transform: function appendStyleChunks(chunk, /* encoding */ _, callback) {
+        const { tags } = instance
+        let html = ''
 
-      /* retrieve html for each new style tag */
-      for (; instanceTagIndex < tags.length; instanceTagIndex += 1) {
-        const tag = tags[instanceTagIndex]
-        html += tag.toHTML(streamAttr)
-      }
+        /* retrieve html for each new style tag */
+        for (; instanceTagIndex < tags.length; instanceTagIndex += 1) {
+          const tag = tags[instanceTagIndex]
+          html += tag.toHTML(streamAttr)
+        }
 
-      /* force our StyleSheets to emit entirely new tags */
-      instance.sealAllTags()
-      /* prepend style html to chunk */
-      ourStream.push(html + chunk)
+        /* force our StyleSheets to emit entirely new tags */
+        instance.sealAllTags()
+
+        /* prepend style html to chunk */
+        this.push(html + chunk)
+        callback()
+      },
     })
 
-    readableStream.on('end', () => {
-      this.closed = true
-      ourStream.push(null)
-    })
-
+    readableStream.on('end', () => this.complete())
     readableStream.on('error', err => {
-      this.closed = true
-      ourStream.emit('error', err)
+      this.complete()
+
+      // forward the error to the transform stream
+      transformer.emit('error', err)
     })
 
-    return ourStream
+    return readableStream.pipe(transformer)
   }
 }
